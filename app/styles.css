@@ -1,0 +1,97 @@
+        @font-face {
+                    font-family: "Default";
+                    src: url("./Lato-Light.ttf") format("truetype");
+        }
+        body {
+            background: #111;
+        }
+        svg {
+            background: #111;
+        }
+        .bounding_box {
+            fill: none;
+            stroke: none;
+        }
+        .appElement > rect.background {
+            fill: #222;
+            stroke: #111;
+            stroke-width: 4;
+        }
+        .headerBackground {
+            fill: #000;
+        }
+        text {
+            fill: #666;
+            font-family: "Default";
+        }
+        .info_text {
+            fill: #888;
+        }
+        .info_title {
+            text-decoration-line: underline;
+            text-decoration-style: solid;
+            text-decoration-color: #0052cc;
+            fill: #0052cc;
+        }
+        .tick_label {
+            fill: #888;
+        }
+        .time_axis { 
+            stroke: #666;
+            stroke-width: 1;
+        }
+        .indicator {
+            stroke: #444;
+            stroke-width: 2;
+            stroke-dasharray: 5,5;
+        }
+        .timeWindow {
+            stroke: #777;
+            stroke-width: 1;
+            fill-opacity: 0;
+            cursor: col-resize;
+        }
+        .dem_rep {
+/*            fill: #800080;*/
+/*            stroke: #800080;*/
+            fill: #600080;
+            stroke: #600080;
+        }
+        .rep {
+            fill: #cc0000;
+            stroke: #cc0000;
+        }
+        .dem {
+/*            fill: #4d0099;*/
+/*            stroke: #4d0099;*/
+            fill: #002db3;
+            stroke: #002db3;
+        }
+        .ind {
+/*            fill: #4d0099;*/
+/*            stroke: #4d0099;*/
+            fill: #b3b300;
+            stroke: #b3b300;
+        }
+        .node {
+            opacity: 0.5;
+        }
+        .enter_node {
+            stroke: "white";
+            stroke-width: 20;
+        }
+        .exit_node {
+            stroke: "black";
+            stroke-width: 20;
+        }
+        .bill_passage {
+            fill: #009900;
+            stroke: #009900;
+        }
+        rect.play {
+            fill: #444;
+        }
+        .timeline {
+            stroke-width: 2;
+            fill: none;
+        }

@@ -1,0 +1,504 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <script type="text/javascript" src="http://d3js.org/d3.v3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mousetrap/1.4.6/mousetrap.js" charset="utf-8"></script>
+    <script src="./helpers.js" charset="utf-8"></script>
+<!--    <script src="http://thematicmapping.org/playground/d3/d3.slider/d3.slider.js"></script>-->
+    
+    <!-- styles -->
+    <link rel="stylesheet" type="text/css" href="styles.css" media="screen" />
+    
+    
+</head>
+
+
+    
+<body>
+
+    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <!--everything lives in this tag-->
+        <g id="networks"></g>
+        <g id="filters"></g>
+        <g id="timelines"></g>
+        <g id="info"></g>
+    </svg>
+
+<!--
+Not really json, just js with global variable definitions.
+End goal is an AJAX framework to query the sql database.
+-->
+    <script src="./json/edge_keys.js" charset="utf-8"></script>
+    <script src="./json/node_keys.js" charset="utf-8"></script>
+    <script src="./json/bill_passage.js" charset="utf-8"></script>
+    <script src="./json/nodes.js" charset="utf-8"></script>
+    <script src="./json/edges.js" charset="utf-8"></script>
+    <script src="./json/party_agreement.js" charset="utf-8"></script>
+    <script src="./json/senators.js" charset="utf-8"></script>
+
+
+<script type="text/javascript">
+
+//-------------------------------------------------------------------------//
+// CONFIGURATION - free parameters determining intial layout and data
+//-------------------------------------------------------------------------//
+var w = 1900, h = 1050;
+var header_h = 80;
+var body_h = h - header_h;
+var l = 300, c = 1200;
+var r = w - l - c;
+var networks_h = 490;
+var timelines_h = body_h - networks_h;
+// how far off center should the networks be, as a proportion of the networks pane?
+var networks_offset = 0.1*c;
+// inner padding for all panes
+var pad = 10;
+
+// all 'sep' variables specify verticsl spacing between elements (text, time series plots)
+var timelines_sep = 2;
+// what to plot on each of the timelines?
+var timelines_config = [
+    {"class":"bill_passage","label":"bill passage rate","ylim":[0.0,1.0],"data":bill_passage},
+    {"class":"dem_rep","indicator":0.5,"label":"inter-party agreement","ylim":[0.0,1.0],"data":party_agreement['Democrat Republican']},
+    {"class":"rep","indicator":0.5,"label":"intra-party agreement (R)","ylim":[0.0,1.0],"data":party_agreement['Republican Republican']},
+    {"class":"dem","indicator":0.5,"label":"intra-party agreement (D)","ylim":[0.0,1.0],"data":party_agreement['Democrat Democrat']}
+];
+// which determines how many timelines there are
+var num_timelines = timelines_config.length;
+    
+var party_class = {'Democrat':'dem','Democrat Democrat':'dem','Republican':'rep','Republican Republican':'rep',
+                   'Independent':'ind','Independent Independent':'ind',
+                   'Democrat Republican':'dem_rep','Republican Democrat':'dem_rep',
+                   'Democrat Independent':'dem_ind','Independent Democrat':'dem_ind',
+                   'Republican Independent':'rep_ind','Independent Republican':'rep_ind'
+                  };
+
+// font sizes
+var title_size = 40;
+var date_size = 40;
+var tick_label_size = 15;
+var info_title_size = 24;
+var info_text_size = 18;
+var info_sep = 4;
+// paragraph indent as portion of width
+var info_indent = 0.05;
+
+var play_button_size = 60;
+
+// scope of the data    
+var loc = 'Senate';
+
+var start_month = 7;
+var min_year = 1990;
+var end_month = 4;
+var max_year = 2016;
+
+// lag in months; this is determined by the python scripts that generate the network embeddings -
+// they use inclusive bounds, so we add  1
+var time_lag = 6 + 1;    
+// units on the time axis are months since start of year 0
+var min_time = min_year * 12 + start_month;
+var max_time = max_year * 12 + end_month;
+// left side of the selector window is time_lag left of the right side, which indicates the month
+var min_disp_time = min_time - time_lag;
+var max_disp_time = max_time;
+
+// time series formatting
+// small tick every year
+var tick_interval = 12;
+// label and large tick every 5 years (this should be a multiple of tick_interval)
+var tick_label_interval = 60;
+// space for labels on the y axes of the time series plots
+var timelines_y_axis_space = 0.04*c
+
+
+var month_names = ['Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var numeric_suffixes = ['th','nd','rd','th','th','th','th','th','th','th'];
+var key_time_increments = {"Left":-1.0,"Right":1.0};
+
+    
+// ALL PLOTTING DEPENDS ON THESE GLOBALS
+var current_time = min_time;
+var date = month_and_year(current_time);
+var current_month = date[0];
+var current_year = date[1];
+
+    
+
+
+//---------------------------------------------------------------//
+// INITIALIZE ALL appElements AND X,Y SCALES
+//---------------------------------------------------------------//
+
+// The main svg object; set the size
+var svg = d3.select("svg").attr("width",w).attr("height",h);
+
+
+// title header
+//---------------------------------------------------------------//
+var header = svg.append("g").attr("id","header").attr("class","appElement");
+header.append("rect")
+    .attr("height", header_h)
+    .attr("width", w)
+    .attr("class","headerBackground");
+    
+header.append("text").attr("text-anchor","middle").attr("x",w/2.0).attr("y",header_h/2.0+title_size/2.0)
+            .text("Polarization & Compromise in the US "+loc+", "+parseInt(min_year)+" to "+parseInt(max_year))
+            .attr("class","title").attr("font-size",font_size(title_size));
+
+
+
+// bar to contain all filter controls
+//---------------------------------------------------------------//
+var filters = svg.select("#filters").attr("class","appElement");
+var filters_top = header_h;
+var filters_left = 0;
+filters.append("rect")
+    .attr("height", body_h)
+    .attr("width", l)
+    .attr("x",filters_left).attr("y",filters_top)
+    .attr("class","background");
+
+// x and y scales
+filters_x = d3.scale.linear().domain([0,1])
+                                .range([filters_left + pad, filters_left + l - pad]);
+filters_y = d3.scale.linear().domain([0,1])
+                                .range([filters_top + pad, filters_top + body_h - pad]);
+        
+// now we need to append all the selector elements
+
+
+
+// network display
+//---------------------------------------------------------------//
+
+var networks = svg.select("#networks").attr("class","appElement");
+//var networks = svg.append("g").attr("id","networks").attr("class","appElement");
+var networks_top = header_h;
+var networks_left = l;
+networks.append("rect")
+    .attr("height", networks_h)
+    .attr("width", c)
+    .attr("x",networks_left).attr("y",networks_top)
+    .attr("class","background");
+
+var x_min = -0.8;
+var x_max = -1*x_min;
+var y_min = -0.5;
+var y_max = -1*y_min - 0.05;
+var aspect = (x_max - x_min)/(y_max - y_min);
+var plot_h = networks_h - 2*pad;
+var plot_w = plot_h*aspect;
+
+var max_node_size = 0.03;
+var age_scale = d3.scale.linear().domain([0, 100]).range([0, max_node_size * networks_h]);
+var exp_scale = d3.scale.linear().domain([0, 100]).range([0, max_node_size * networks_h]);
+// this seems redundant but it's a place-holder; this is the call that plot_nodes uses and we'd like
+// to be able to switch it with user control
+var node_size = exp_scale;
+// duration of transitions of the network plots
+var trans_duration = 1200;
+
+
+// x and y scales for the network plots; only a portion of the network diplay <g>
+var networks_x = d3.scale.linear().domain([x_min,x_max])
+            .range([networks_left + 0.5*(c - plot_w) + networks_offset, networks_left + c - 0.5*(c - plot_w) + networks_offset]);
+var networks_y = d3.scale.linear().domain([y_min,y_max])
+                                .range([networks_top + networks_h - pad, networks_top + pad]);
+
+//var play_mode = false;    
+//// Play button; work in progress
+//networks.append("rect").attr("class", "play")
+//    .attr("rx", pad).attr("ry", pad)
+//    .attr("x", networks_left + pad)
+//    .attr("y", networks_top + networks_h - pad - 2 * tick_label_size - play_button_size)
+//    .attr("width", play_button_size)
+//    .attr("height", play_button_size)
+//    .on("click", play);
+//
+//function play() {
+//    play_mode = !play_mode;
+//    if (!play_mode) {
+//        return null;
+//    }
+//    console.log(increment_time(1));
+//    while(increment_time(1)) {
+//        increment_time();
+//        sleepFor(1000);
+//        update_text();
+//        plot_network();
+//        console.log(current_year);
+//        console.log(current_month);
+//        if (!play_mode) {
+//            break;
+//        }
+//    }
+//}
+    
+function sleepFor( sleepDuration ){
+    var now = new Date().getTime();
+    while(new Date().getTime() < now + sleepDuration){ /* do nothing */ } 
+}
+
+// instructions for viewing
+networks.append("text").attr("x", networks_left + pad).attr("y", networks_y(y_min))
+        .attr("font-size", font_size(tick_label_size))
+        .text("(Use ← & → keys or drag the selector to navigate in time)")
+networks.append("text").attr("x", networks_left + pad).attr("y", networks_y(y_min) - 1.5*tick_label_size)
+        .attr("font-size", font_size(tick_label_size))
+        .text("Press F11 to enter full-screen (best viewed at 1920x1080)")
+
+
+// bounding box on network plot region - for mouse capture
+networks.append("rect").attr("x",networks_x(x_min)).attr("y",networks_y(y_max))
+    .attr("width",networks_x(x_max)-networks_x(x_min))
+    .attr("height",networks_y(y_min)-networks_y(y_max))
+    .attr("class","bounding_box")
+    .style("cursor","crosshair");
+
+
+
+// timeline display  
+//---------------------------------------------------------------//
+var timelines = svg.select("#timelines").attr("class","appElement");
+var timelines_top = networks_top + networks_h;
+var timelines_left = l;
+timelines.append("rect")
+    .attr("height", timelines_h)
+    .attr("width", c)
+    .attr("x",timelines_left).attr("y",timelines_top)
+    .attr("class","background");
+
+// x and y scales
+// x scale maps min_disp_time, max_disp_time over the time series window range
+var timelines_x = d3.scale.linear().domain([min_disp_time, max_disp_time])
+                                .range([timelines_left + pad, timelines_left + c - pad - timelines_y_axis_space]);
+//// x bounds in pixels for mouse scrolling
+//var min_time_x = timelines_x(min_time);
+//var max_time_x = timelines_x(max_time);
+    
+// y scale for the whole element
+var timelines_y = d3.scale.linear().domain([0.0, 1.0]).range([timelines_top + pad, timelines_top + timelines_h - tick_label_size - pad]);
+
+
+// distinct timeline y scales for different timelines for easy plotting
+// total printable height minus all margin spaces / number of plots
+var plot_height = (timelines_y(1) - timelines_y(0) - (num_timelines - 1) * timelines_sep)/num_timelines;
+
+var start_y = timelines_y(1);
+var y = start_y;
+
+for(var i = 0; i < num_timelines; i++){
+    var scale = d3.scale.linear().domain(timelines_config[i]['ylim']).range([y, y-plot_height]);
+    timelines_config[i]['scale'] = scale;
+    y = y - timelines_sep - plot_height;
+}
+
+
+var timeline_d = d3.svg.line()
+    .interpolate("basis")
+    .x(function(d) { return timelines_x(parseFloat(d['key']) - 0.5 * time_lag); })
+    .y(function(d) { return y_scale(d['value']); });
+
+
+
+// plot the actual time series
+//---------------------------------------------------------------//
+var y_scale;
+var timeline_plots = timelines.selectAll("path.timeline").data(timelines_config);
+timeline_plots.enter()
+    .append("path")
+    .attr("d", function(d,i) {y_scale = d['scale']; return timeline_d(d3.entries(d['data']))} )
+    .attr("class", function(d,i) {return d['class'] + ' ' + 'timeline'});
+    
+
+
+// axes and labels for all timeseries plots
+//---------------------------------------------------------------//
+
+// draw axes for all time-series plots
+for (var i = 0; i < num_timelines; i++) {
+    var y_scale = timelines_config[i]['scale'];
+    var ylim = timelines_config[i]['ylim'];
+    
+    // colored rect and text indicating time series role
+    timelines.append("rect").attr("class",timelines_config[i]['class'])
+        .attr("x", timelines_x(max_disp_time) + 0.1 * timelines_y_axis_space)
+        .attr("y", y_scale(ylim[1]))
+        .attr("width", 0.5 * timelines_y_axis_space)
+        .attr("height", y_scale(0) - y_scale(1))
+        .style("opacity",0.7);
+    timelines.append("text")
+        .attr("x", timelines_x(max_disp_time) + timelines_y_axis_space * 1.2)
+        .attr("y", y_scale(0.5 * (ylim[0] + ylim[1])))
+        .attr("text-anchor", "left")
+        .text(timelines_config[i]['label'])
+        .attr("class","tick_label")
+    .style("color","white");
+        //.style("font-size",22);
+        //.attr("transform", "rotate (90)");
+    
+    // the horizontal x-axis line
+    timelines.append("line")
+        .attr("x1", timelines_x(min_disp_time))
+        .attr("x2", timelines_x(max_disp_time))
+        .attr("y1", y_scale(ylim[0]))
+        .attr("y2", y_scale(ylim[0]))
+        .attr("class","time_axis");
+    // the horizontal dashed indicator line, if one is indicated
+    if (timelines_config[i]['indicator'] !== undefined) {
+        var y = timelines_config[i]['indicator']
+        timelines.append("line")
+            .attr("x1", timelines_x(min_disp_time))
+            .attr("x2", timelines_x(max_disp_time))
+            .attr("y1", y_scale(y))
+            .attr("y2", y_scale(y))
+            .attr("class","indicator");
+    }
+    
+    // the tick lines
+    for (var time = min_year * 12; time <= max_disp_time; time = time + tick_interval) {
+        var high = (time % tick_label_interval == 0) ? 0.07 : 0.035;
+        var low = (time % tick_label_interval == 0) ? -0.035 : 0.0;
+        var range = y_scale(ylim[1]) -  y_scale(ylim[0]);
+        timelines.append("line")
+            .attr("x1", timelines_x(time))
+            .attr("x2", timelines_x(time))
+            .attr("y1", y_scale(ylim[0]) + high * range)
+            .attr("y2", y_scale(ylim[0]) + low * range)
+            .attr("class","time_axis");
+    }
+}
+
+// draw tick labels
+for (var time = min_year * 12; time <= max_disp_time; time = time + tick_interval) {
+    if(time % tick_label_interval == 0){
+        var date = month_and_year(time);
+        var month = date[0];
+        var year = date[1];
+        timelines.append("text").attr("x",timelines_x(time)).attr("y",timelines_top + timelines_h - pad)
+                .attr("text-anchor","left").text(parseInt(year)).style("font-size",font_size(tick_label_size))
+                .attr("class","tick_label");
+    }
+}
+
+
+
+// info bar to display text on specific time slices
+//---------------------------------------------------------------//
+var info = svg.select("#info").attr("class","appElement");
+var info_top = header_h;
+var info_left = l + c;
+info.append("rect")
+    .attr("height", body_h)
+    .attr("width", r)
+    .attr("x",info_left).attr("y",info_top)
+    .attr("class","background");
+        
+info_x = d3.scale.linear().domain([0,1])
+                                .range([info_left + pad, info_left + r - pad]);
+info_y = d3.scale.linear().domain([0,1])
+                                .range([info_top + pad, info_top + body_h - pad]);
+
+
+
+// round all the corners
+//---------------------------------------------------------------//
+d3.selectAll("rect.background").attr("rx",pad).attr("ry",pad);
+
+
+
+
+//---------------------------------------------------------------//
+// CONTROLS
+//---------------------------------------------------------------//
+
+
+// slider for selecting time slices
+//---------------------------------------------------------------//
+var _dragSliderLine;
+
+var timeWindow = timelines.append("rect")
+    .attr("x",timelines_x(current_time - time_lag))
+    .attr("y",timelines_y(0))
+    .attr("width",timelines_x(time_lag) - timelines_x(0))
+    .attr("height",timelines_y(1) - timelines_y(0))
+    .attr("class","timeWindow")
+    .on("mousedown", function(){            
+        d3.event.preventDefault();
+        _dragSliderLine = this;
+        document.body.focus();
+        document.onselectstart = function () { return false; };
+        return false;
+  });
+
+var _dragSliderLine  = null;
+
+svg.on("mouseup", function(){
+  d3.event.preventDefault();
+  if (_dragSliderLine != null){
+    _dragSliderLine = null;
+  }
+});
+
+
+timelines.on("mousemove", function(){   
+    d3.event.preventDefault();     
+    if( _dragSliderLine != null ){ 
+        var x = d3.mouse(this)[0];
+        var time = Math.round(timelines_x.invert(x) + time_lag);
+        
+    if(time >= min_time && time <= max_time){
+        timeWindow.attr("x", x);
+        var date = month_and_year(time);
+        current_time = time;
+        current_month = date[0];
+        current_year = date[1];
+        update_text();
+        plot_network(trans_duration);
+    }
+  }
+});  
+
+
+// key bindings for selecting time slices
+//---------------------------------------------------------------//
+Mousetrap.bind(['left','right'], 
+                function(event){
+                    event.preventDefault();
+                    var key = event.keyIdentifier;
+                    var increment = key_time_increments[key];
+                    increment_time(increment);
+                    update_text();
+                    plot_network(trans_duration);
+                    return false;
+                });
+
+
+
+//---------------------------------------------------------------//
+// INITIALIZATION
+//---------------------------------------------------------------//
+
+            
+
+// color test
+//networks.append("circle").attr("cx",networks_x(-0.5)).attr("cy",networks_y(0.0)).attr("r",80).attr("class","dem");
+//networks.append("circle").attr("cx",networks_x(0.0)).attr("cy",networks_y(0.0)).attr("r",80).attr("class","dem_rep");
+//networks.append("circle").attr("cx",networks_x(0.5)).attr("cy",networks_y(0.0)).attr("r",80).attr("class","rep");
+    
+
+
+//var node_plot = networks.selectAll("circle.node").data(d3.values(nodes[current_time]))//, 
+//                                                           function(d,i) {return d[node_keys['id']];});
+
+update_text();
+init_network();
+
+
+// END OF MAIN SCRIPT
+</script>
+
+</body>
+</html>

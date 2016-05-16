@@ -1,0 +1,23 @@
+---
+schema:
+    - ['location','TEXT']
+    - ['session','INTEGER']
+    - ['roll','INTEGER']
+    - ['year', 'INTEGER']
+    - ['quarter', 'INTEGER']
+    - ['month', 'INTEGER']
+    - ['aye', 'INTEGER']
+    - ['nay', 'INTEGER']
+    - ['present', 'INTEGER']
+    - ['nv','INTEGER']
+    - ['required','TEXT']
+    - ['result','TEXT']
+    - ['category','TEXT']
+    - ['type','TEXT']
+    - ['question','TEXT']
+keys:
+    - location
+    - session
+    - roll
+    - year
+...

@@ -1,0 +1,14 @@
+---
+schema:
+    - ['location','TEXT']
+    - ['time','INTEGER']
+    - ['party1','TEXT']
+    - ['party2','TEXT']
+    - ['agreement','REAL']
+    - ['affinity','REAL']
+keys:
+    - location
+    - time
+    - party1
+    - party2
+...

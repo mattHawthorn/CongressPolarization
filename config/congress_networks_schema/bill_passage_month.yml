@@ -1,0 +1,9 @@
+---
+schema:
+    - ['location','TEXT']
+    - ['time','INTEGER']
+    - ['rate','REAL']
+keys:
+    - location
+    - time
+...

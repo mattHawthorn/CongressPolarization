@@ -1,0 +1,19 @@
+---
+schema:
+    - ['location','TEXT']
+    - ['time','INTEGER']
+    - ['id','TEXT']
+    - ['age','INTEGER']
+    - ['experience','REAL']
+    - ['pop_density','REAL']
+    - ['x','REAL']
+    - ['y','REAL']
+keys:
+    - location
+    - time
+    - id
+indices:
+    index:
+        - location
+        - time
+...

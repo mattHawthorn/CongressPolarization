@@ -1,0 +1,18 @@
+---
+schema:
+    - ['location','TEXT']
+    - ['time','INTEGER']
+    - ['id1','TEXT']
+    - ['id2','TEXT']
+    - ['agreement','REAL']
+    - ['affinity','REAL']
+keys:
+    - location
+    - time
+    - id1
+    - id2
+indices:
+    index:
+        - location
+        - time
+...

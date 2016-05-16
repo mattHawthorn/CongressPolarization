@@ -1,0 +1,31 @@
+---
+schema:
+    - ['location','TEXT']
+    - ['session','INTEGER']
+    - ['roll','INTEGER']
+    - ['year', 'INTEGER']
+    - ['quarter', 'INTEGER']
+    - ['month', 'INTEGER']
+    - ['id','TEXT']
+    - ['vote', 'TEXT']
+    - ['value', 'TEXT']
+    - ['state', 'TEXT']
+keys:
+    - location
+    - session
+    - roll
+    - year
+    - id
+indices:
+    # for fast queries when building graphs,
+    # one set of graphs for each time resolution
+    year_index:
+        - location
+        - year
+    quarter_index:
+        - location
+        - quarter
+    month_index:
+        - location
+        - month
+...
