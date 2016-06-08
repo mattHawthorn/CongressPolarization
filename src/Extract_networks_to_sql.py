@@ -155,10 +155,14 @@ for time_col in time_cols:
             party_affinities = interparty_affinity(affinities,summary_func=lambda x: np.exp(np.mean(np.log(x))))
             party_agreements = interparty_affinity(agreements,summary_func=np.mean)
             
-            command = "select aye,nay from bills where {}<={} and {}>={} and location={}".format(time_col,time_val,
+            command = "select aye,nay from bills where {}<={} and {}>={} and location='{}'".format(time_col,time_val,
                                                                                                  time_col,time_val-lag,location)
-            df = pd.read_sql(command,congresscon)
-            rate_of_passage = (df['aye'] > df['nay']).sum()/df.shape[0]
+            df = pd.read_sql(command,con)
+            if df.shape[0] == 0:
+                rate_of_passage = 0
+            else:
+                rate_of_passage = (df['aye'] > df['nay']).sum()/df.shape[0]
+                print(rate_of_passage)
             
             affinities.columns = affinities.columns.droplevel(1)
             affinities.index = affinities.index.droplevel(1)
@@ -175,7 +179,7 @@ for time_col in time_cols:
             insert_rows(out_cur, 'party_affinities_'+time_col, party_data, party_affinity_fields)
             insert_rows(out_cur, 'nodes_'+time_col, node_data, node_fields)
             
-            command = 'insert into bill_pasage_{} values {}'.format(time_col,(location,time_val,rate_of_passage))
+            command = 'insert or replace into bill_passage_{} values {}'.format(time_col,(location,time_val,rate_of_passage))
             out_cur.execute(command)
             
             out_con.commit()

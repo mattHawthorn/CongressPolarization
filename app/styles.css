@@ -36,6 +36,9 @@
         .tick_label {
             fill: #888;
         }
+        .y_axis_label {
+            fill: #888;
+        }
         .time_axis { 
             stroke: #666;
             stroke-width: 1;
@@ -73,8 +76,21 @@
             fill: #b3b300;
             stroke: #b3b300;
         }
+        .dem_ind {
+            fill: #009900;
+            stroke: #009900;
+        }
+        .rep_ind {
+            fill: #b36b00;
+            stroke: #b36b00;
+        }
         .node {
-            opacity: 0.5;
+            opacity: 0.6;
+        }
+        .edge {
+            opacity: 0.3;
+            stroke-width: 2;
+            fill: none;
         }
         .enter_node {
             stroke: "white";

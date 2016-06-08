@@ -46,12 +46,10 @@ End goal is an AJAX framework to query the sql database.
 var w = 1900, h = 1050;
 var header_h = 80;
 var body_h = h - header_h;
-var l = 300, c = 1200;
+var l = 0, c = 1500;
 var r = w - l - c;
-var networks_h = 490;
+var networks_h = 520;
 var timelines_h = body_h - networks_h;
-// how far off center should the networks be, as a proportion of the networks pane?
-var networks_offset = 0.1*c;
 // inner padding for all panes
 var pad = 10;
 
@@ -59,10 +57,10 @@ var pad = 10;
 var timelines_sep = 2;
 // what to plot on each of the timelines?
 var timelines_config = [
-    {"class":"bill_passage","label":"bill passage rate","ylim":[0.0,1.0],"data":bill_passage},
-    {"class":"dem_rep","indicator":0.5,"label":"inter-party agreement","ylim":[0.0,1.0],"data":party_agreement['Democrat Republican']},
-    {"class":"rep","indicator":0.5,"label":"intra-party agreement (R)","ylim":[0.0,1.0],"data":party_agreement['Republican Republican']},
-    {"class":"dem","indicator":0.5,"label":"intra-party agreement (D)","ylim":[0.0,1.0],"data":party_agreement['Democrat Democrat']}
+    {"class":"bill_passage","label":"Pct. of bills passed","ylim":[0.0,1.0],"data":bill_passage},
+    {"class":"dem_rep","indicator":0.5,"label":"Avg. Agrmt. (R-D)","ylim":[0.0,1.0],"data":party_agreement['Democrat Republican']},
+    {"class":"rep","indicator":0.5,"label":"Avg. Argrmt. (R)","ylim":[0.0,1.0],"data":party_agreement['Republican Republican']},
+    {"class":"dem","indicator":0.5,"label":"Avg. Agrmt. (D)","ylim":[0.0,1.0],"data":party_agreement['Democrat Democrat']}
 ];
 // which determines how many timelines there are
 var num_timelines = timelines_config.length;
@@ -78,6 +76,7 @@ var party_class = {'Democrat':'dem','Democrat Democrat':'dem','Republican':'rep'
 var title_size = 40;
 var date_size = 40;
 var tick_label_size = 15;
+var y_axis_label_size = 13;
 var info_title_size = 24;
 var info_text_size = 18;
 var info_sep = 4;
@@ -89,8 +88,8 @@ var play_button_size = 60;
 // scope of the data    
 var loc = 'Senate';
 
-var start_month = 7;
-var min_year = 1990;
+var start_month = 1;
+var min_year = 1940;
 var end_month = 4;
 var max_year = 2016;
 
@@ -114,8 +113,8 @@ var timelines_y_axis_space = 0.04*c
 
 
 var month_names = ['Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-var numeric_suffixes = ['th','nd','rd','th','th','th','th','th','th','th'];
-var key_time_increments = {"Left":-1.0,"Right":1.0};
+var numeric_suffixes = ['th','st','nd','rd','th','th','th','th','th','th','th'];
+var key_time_increments = {"Left":-2,"Right":2};
 
     
 // ALL PLOTTING DEPENDS ON THESE GLOBALS
@@ -185,21 +184,27 @@ networks.append("rect")
 
 var x_min = -0.8;
 var x_max = -1*x_min;
-var y_min = -0.5;
-var y_max = -1*y_min - 0.05;
+var y_min = -0.45;
+var y_max = -1*y_min;
 var aspect = (x_max - x_min)/(y_max - y_min);
-var plot_h = networks_h - 2*pad;
-var plot_w = plot_h*aspect;
+// how far off center should the networks be, as a proportion of the networks pane?
+var networks_offset = 0.0*c;
 
-var max_node_size = 0.03;
+var plot_h = networks_h - 2*pad;
+var plot_w = plot_h*aspect*2;
+
+var max_node_size = 0.02;
 var age_scale = d3.scale.linear().domain([0, 100]).range([0, max_node_size * networks_h]);
 var exp_scale = d3.scale.linear().domain([0, 100]).range([0, max_node_size * networks_h]);
 // this seems redundant but it's a place-holder; this is the call that plot_nodes uses and we'd like
 // to be able to switch it with user control
 var node_size = exp_scale;
 // duration of transitions of the network plots
-var trans_duration = 1200;
+var trans_duration = 700;
 
+var min_edge_width = 1;
+var max_edge_width = 4;
+var edge_width = d3.scale.linear().domain([0.5,1.0]).range([min_edge_width,max_edge_width]);
 
 // x and y scales for the network plots; only a portion of the network diplay <g>
 var networks_x = d3.scale.linear().domain([x_min,x_max])
@@ -235,18 +240,18 @@ var networks_y = d3.scale.linear().domain([y_min,y_max])
 //        }
 //    }
 //}
-    
-function sleepFor( sleepDuration ){
-    var now = new Date().getTime();
-    while(new Date().getTime() < now + sleepDuration){ /* do nothing */ } 
-}
+//    
+//function sleepFor( sleepDuration ){
+//    var now = new Date().getTime();
+//    while(new Date().getTime() < now + sleepDuration){ /* do nothing */ } 
+//}
 
 // instructions for viewing
 networks.append("text").attr("x", networks_left + pad).attr("y", networks_y(y_min))
-        .attr("font-size", font_size(tick_label_size))
+        .style("font-size", font_size(tick_label_size))
         .text("(Use ← & → keys or drag the selector to navigate in time)")
 networks.append("text").attr("x", networks_left + pad).attr("y", networks_y(y_min) - 1.5*tick_label_size)
-        .attr("font-size", font_size(tick_label_size))
+        .style("font-size", font_size(tick_label_size))
         .text("Press F11 to enter full-screen (best viewed at 1920x1080)")
 
 
@@ -330,14 +335,14 @@ for (var i = 0; i < num_timelines; i++) {
         .attr("height", y_scale(0) - y_scale(1))
         .style("opacity",0.7);
     timelines.append("text")
-        .attr("x", timelines_x(max_disp_time) + timelines_y_axis_space * 1.2)
-        .attr("y", y_scale(0.5 * (ylim[0] + ylim[1])))
+        .attr("x", 0)//timelines_x(max_disp_time) + timelines_y_axis_space * 0.5)
+        .attr("y", 0)//y_scale(0.5 * (ylim[0] + ylim[1])))
         .attr("text-anchor", "left")
         .text(timelines_config[i]['label'])
-        .attr("class","tick_label")
-    .style("color","white");
-        //.style("font-size",22);
-        //.attr("transform", "rotate (90)");
+        .attr("class","y_axis_label")
+        //.style("color","white");
+        .style("font-size",font_size(y_axis_label_size))
+        .attr("transform", "matrix ( 0 1 -1 0 " + (timelines_x(max_disp_time) + timelines_y_axis_space * 0.7).toString() + ' ' +(y_scale(ylim[1])).toString() + ")")
     
     // the horizontal x-axis line
     timelines.append("line")
@@ -370,6 +375,7 @@ for (var i = 0; i < num_timelines; i++) {
             .attr("class","time_axis");
     }
 }
+    
 
 // draw tick labels
 for (var time = min_year * 12; time <= max_disp_time; time = time + tick_interval) {
@@ -411,7 +417,7 @@ d3.selectAll("rect.background").attr("rx",pad).attr("ry",pad);
 
 
 //---------------------------------------------------------------//
-// CONTROLS
+// CONTROLS/ EVENT HANDLING
 //---------------------------------------------------------------//
 
 
@@ -453,6 +459,7 @@ timelines.on("mousemove", function(){
         timeWindow.attr("x", x);
         var date = month_and_year(time);
         current_time = time;
+        set_network_vars();
         current_month = date[0];
         current_year = date[1];
         update_text();
@@ -470,6 +477,7 @@ Mousetrap.bind(['left','right'],
                     var key = event.keyIdentifier;
                     var increment = key_time_increments[key];
                     increment_time(increment);
+                    set_network_vars();
                     update_text();
                     plot_network(trans_duration);
                     return false;
@@ -489,10 +497,19 @@ Mousetrap.bind(['left','right'],
 //networks.append("circle").attr("cx",networks_x(0.5)).attr("cy",networks_y(0.0)).attr("r",80).attr("class","rep");
     
 
+// init the global network variables
+var edge_threshold = 0.8;
+networks.append("text")
+    .attr("text-anchor","middle")
+    .attr("x",networks_x(0))
+    .attr("y",networks_top + tick_label_size + pad)
+    .style("font-size", font_size(tick_label_size))
+    .text("Edges represent > 85% agreement between two senators")
+var current_nodes;
+var current_edges;
+set_network_vars();
 
-//var node_plot = networks.selectAll("circle.node").data(d3.values(nodes[current_time]))//, 
-//                                                           function(d,i) {return d[node_keys['id']];});
-
+// draw everything
 update_text();
 init_network();
 

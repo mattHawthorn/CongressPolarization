@@ -206,7 +206,8 @@ def year_quarter_month(datetime):
 ## Helpers for Extract_networks_to_sql.py
 ######################################################
 
-vote_map = {'+':1,'-':-1,'0':0,'P':0,'NAY':-1,'YEA':1,None:0,np.nan:0}
+# apply str(vote).upper() before hashing to this dict
+vote_map = {'+':1,'-':-1,'0':0,'P':0,'NAY':-1,'YEA':1,'NONE':0,'NAN':0,'UNKNOWN':0,'AYE':1,'NO':-1}
 
 def vote_table(con,time_col,time,location,lag=0,drop_dups=True):
     # get all votes for a certain time frame, with bills as columns and voters as index
@@ -215,7 +216,7 @@ def vote_table(con,time_col,time,location,lag=0,drop_dups=True):
     command = """
         select session, year, roll, votes.id, party, vote
         from votes join senators on votes.id = senators.id
-        where {} >= {} and {} <= {} and location = '{}'""".format(time_col,start,time_col,end,location)
+        where {} > {} and {} <= {} and location = '{}'""".format(time_col,start,time_col,end,location)
     
     data = pd.read_sql_query(command,con)
     
@@ -228,7 +229,7 @@ def vote_table(con,time_col,time,location,lag=0,drop_dups=True):
             print("{} duplicated entries for {} {}, {}".format(num_rows-data.shape[0],time_col,time,location))
             print("{} remaining rows after duplicate removal".format(data.shape[0]))
     
-    data.vote = data.vote.apply(lambda s: vote_map.get(s,0))
+    data.vote = data.vote.apply(lambda s: vote_map.get(str(s).upper(),0))
     
     data = data.set_index(['id','party','session','year','roll']).unstack(['session','year','roll'])
     data.fillna(0,inplace=True)
@@ -257,7 +258,9 @@ def voter_agreement_pos(voter1,voter2,probs=None,weights=None):
     locs=voter1*voter2 != 0
     if locs.sum() == 0:
         return 0.0
-    return (voter1==voter2)[locs].mean()
+    #return (voter1==voter2)[locs].mean()
+    # with smoothing: add 1 agreement and 1 disagreement
+    return ((voter1==voter2)[locs].sum() + 1)/(len(locs) + 2)
     
 def voter_perplexity(voter1,voter2,probs,weights=None):
     v1 = voter1.values#.astype('float')
@@ -346,7 +349,7 @@ def get_nodes(con,time_var,location,time=None,start=None,end=None):
     if start is None:
         command = """select * from nodes_{} where location='{}' and time={}""".format(time_var,location,time)
     else:
-        command = """select * from nodes_{} where location='{}' and time>={} and time<={}""".format(time_var,location,start,end)
+        command = """select * from nodes_{} where location='{}' and time>{} and time<={}""".format(time_var,location,start,end)
     nodes = pd.read_sql_query(command,con)
     nodes.set_index('id',inplace=True,drop=False)
     
@@ -357,7 +360,7 @@ def get_edges(con,time_var,time,location,start=None,end=None,threshold=0.0):
     if not start:
         command = """select * from affinities_{} where location='{}' and time={}""".format(time_var,location,time)
     else:
-        command = """select * from afinities_{} where location='{}' and time>={} and time<={}""".format(time_var,location,start,end)
+        command = """select * from afinities_{} where location='{}' and time>{} and time<={}""".format(time_var,location,start,end)
     edges = pd.read_sql_query(command,con)
     edges.set_index(['id1','id2'],inplace=True,drop=False)
     edges = edges[edges['agreement'] > threshold]
@@ -398,7 +401,7 @@ def compute_embedding(sims,senators,last_ids=None,last_embedding=None,last_cente
     parties = senators.party[sims.index]
     parties = parties.apply(normalize_party)
     
-    mds = manifold.MDS(n_components=2, max_iter=50000, eps=1e-9, random_state=seed,
+    mds = manifold.MDS(n_components=2, max_iter=50000, eps=1e-9,
                        dissimilarity="precomputed", n_jobs=-2,metric=True)
     
     if last_embedding is None:
@@ -460,7 +463,7 @@ def compute_embedding(sims,senators,last_ids=None,last_embedding=None,last_cente
     return embedding, sims.index, (rep_center, dem_center)
 
 
-def plot_network(sims,embedding,senators,xlim=(-0.6,0.6),ylim=(-0.3,0.3),threshold=0.1,location=None,month=None,year=None):
+def plot_network(sims,embedding,senators,xlim=(-0.6,0.6),ylim=(-0.3,0.3),threshold=0.15,location=None,month=None,year=None):
     parties = senators.party[sims.index]
     parties = parties.apply(normalize_party)
     #print(parties[0:10])
@@ -525,7 +528,7 @@ def numpy_to_py(x):
     
 
 def get_party_affinities(networks_con,time_var,start,end,location,agreement_metric='agreement'):
-    command = "select party1, party2, time, {} from party_affinities_{} where time >= {} and time <= {} and location = '{}'"
+    command = "select party1, party2, time, {} from party_affinities_{} where time > {} and time <= {} and location = '{}'"
     command = command.format(agreement_metric, time_var, start, end, location)
     
     df = pd.read_sql_query(command, networks_con)

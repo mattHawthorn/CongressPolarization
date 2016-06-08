@@ -1,6 +1,6 @@
 "use strict";
 
-// functions for drawing
+// Formatting  functions
 //---------------------------------------------------------------//
 
 function month_and_year(time) {
@@ -12,6 +12,7 @@ function month_and_year(time) {
     }
     return [month, year];
 }
+
 
 function get_date_range(x) {
     var time = timelines_x.invert(x),
@@ -27,16 +28,7 @@ function get_date_range(x) {
     }
     return [month1, year1, month2, year2];
 }
-        
-function print_time(dates) {
-    networks.selectAll("text.date").remove();
-    var x = networks_left + 2 * pad,
-        y = networks_top + pad,
-        lines = [date_str(dates[0], dates[1]) + " - ", date_str(dates[2], dates[3])];
-    
-    print_text_lines(networks, x, y, date_size, pad, lines, "date", "left");
-    y += date_size;
-}
+
 
 function date_str(month, year) {
     return parseInt(year) + " " + month_names[month];
@@ -44,21 +36,6 @@ function date_str(month, year) {
 
 function year_to_session(year) {
     return Math.floor((year - 1787) / 2);
-}
-
-
-function increment_time(increment) {
-    var time = current_time + increment;
-    
-    if(time >= min_time && time <= max_time){
-        var date = month_and_year(time);
-        current_time = time;
-        current_month = date[0];
-        current_year = date[1];
-        timeWindow.attr("x", timelines_x(current_time - time_lag));
-        return true;
-    }
-    return false;
 }
 
 
@@ -95,11 +72,13 @@ function print_info(month, year) {
     print_text_lines(info, info_x(info_indent), y + 2*info_sep, info_text_size, info_sep, ['Narration','goes','here.'], "info_text","left")
 }
     
+
 function font_size(size) {
     return parseInt(size) + "px";
 }
 
 
+// print lines of text sequentially from a start location
 function print_text_lines(elt, x, y, size, sep, lines, cl, anchor='left',clear=true) {
     if (sep === undefined) {
         sep = 0.2 * size;
@@ -123,8 +102,43 @@ function print_text_lines(elt, x, y, size, sep, lines, cl, anchor='left',clear=t
 }
 
 
-// Functions to initialize and plot all of the display
+
+
+// Control and plotting
 //----------------------------------------------------------------//
+
+function increment_time(increment) {
+    var time = current_time + increment;
+    
+    if(time >= min_time && time <= max_time){
+        var date = month_and_year(time);
+        current_time = time;
+        current_month = date[0];
+        current_year = date[1];
+        timeWindow.attr("x", timelines_x(current_time - time_lag));
+        return true;
+    }
+    return false;
+}
+
+
+function set_network_vars() {
+    current_nodes = nodes[parseInt(current_time)];
+    current_edges = edges[parseInt(current_time)].filter(function(edge) { return edge[2] >= edge_threshold});    
+}
+
+  
+function print_time(dates) {
+    networks.selectAll("text.date").remove();
+    var x = networks_left + 2 * pad,
+        y = networks_top + pad,
+        lines = [date_str(dates[0], dates[1]) + " - ", date_str(dates[2], dates[3])];
+    
+    print_text_lines(networks, x, y, date_size, pad, lines, "date", "left");
+    y += date_size;
+}
+
+
 function update_text() {
     var dates = month_and_year(current_time - time_lag + 1).concat(month_and_year(current_time));
     print_time(dates);
@@ -145,8 +159,25 @@ function node_class(d,i) {
     return 'node ' + enter_status + exit_status + party_class[senators[d[node_keys['id']]]['party']];
 }
 
+
+function edge_class(d,i) {
+    return 'edge ' + party_class[senators[d[0]]['party'] + ' ' + senators[d[1]]['party']];
+}
+
+
 function init_network() {
-    networks.selectAll("circle.node").data(d3.values(nodes[parseInt(current_time)]), function(d,i) {return d[node_keys['id']];})
+    networks.selectAll("line.edge").data(current_edges,
+                                        function(d) {return d[0] + ' ' + d[1];})
+        .enter().append("line")//.filter(function(d) { return d[2] > edge_threshold;})
+        .attr("x1", function(d,i) {return networks_x(current_nodes[d[0]][node_keys['x']]);})
+        .attr("y1", function(d,i) {return networks_y(current_nodes[d[0]][node_keys['y']]);})
+        .attr("x2", function(d,i) {return networks_x(current_nodes[d[1]][node_keys['x']]);})
+        .attr("y2", function(d,i) {return networks_y(current_nodes[d[1]][node_keys['y']]);})
+        .style("stroke-width", function(d,i) { return edge_width(d[2]);})
+        .attr("class", edge_class);
+        
+    
+    networks.selectAll("circle.node").data(d3.values(current_nodes), function(d,i) {return d[node_keys['id']];})
         .enter().append("circle")
         .attr("cx", function(d,i) {/*console.log(networks_x(d[node_keys['x']]));*/ return networks_x(d[node_keys['x']]);})
         .attr("cy", function(d,i) {/*console.log(networks_y(d[node_keys['y']]));*/ return networks_y(d[node_keys['y']]);})
@@ -155,27 +186,46 @@ function init_network() {
     
 }
 
-function plot_network(duration=1000) {
-    var node_plot = networks.selectAll("circle.node").data(d3.values(nodes[parseInt(current_time)]), 
-                                                           function(d,i) {return d[node_keys['id']];})
+
+function plot_network(duration=500) {
+    //networks.selectAll("line.edge").remove();
+    
+    var node_plot = networks.selectAll("circle.node").data(d3.values(current_nodes), 
+                                                           function(d) {return d[node_keys['id']];})
     node_plot.enter().append("circle")
         .attr("cx", function(d,i) {/*console.log(networks_x(d[node_keys['x']]));*/ return networks_x(d[node_keys['x']]);})
         .attr("cy", function(d,i) {/*console.log(networks_y(d[node_keys['y']]));*/ return networks_y(d[node_keys['y']]);})
-        .attr("r", function(d,i) {/*console.log(age_scale(d[node_keys['age']]));*/ return node_size(d[node_keys['age']]);})
+        .attr("r", 0.0)
         .attr("class", node_class);
-    node_plot.exit().transition().duration(duration * 0.5).remove();
-    node_plot.transition().duration(duration)
-//        .each("start", function() {  // Start animation
-//                            d3.select(this)  // 'this' means the current element
-//                                
-//                        })
-        .delay(function(d, i) { return 15*d[node_keys['experience']];})
-//                            return i / dataset.length * 500;  // Dynamic delay (i.e. each item delays a little longer)
-//                        })
+    node_plot.exit().transition().duration(duration * 0.3).remove();
+    node_plot.transition().duration(duration * 0.7)
+        //.delay(function(d, i) { return 15*d[node_keys['experience']];}) // most experienced move last
         .attr("cx", function(d,i) {/*console.log(networks_x(d[node_keys['x']]));*/ return networks_x(d[node_keys['x']]);})
         .attr("cy", function(d,i) {/*console.log(networks_y(d[node_keys['y']]));*/ return networks_y(d[node_keys['y']]);})
         .attr("r", function(d,i) {/*console.log(age_scale(d[node_keys['age']]));*/ return node_size(d[node_keys['age']]);})
         .attr("class",function(d,i) {return 'node ' + party_class[senators[d[node_keys['id']]]['party']]});
-    
    
+    var edge_plot = networks.selectAll("line.edge").data(current_edges,
+                                                        function(d) {return d[0] + ' ' + d[1];});
+
+    edge_plot.exit().transition().duration(duration * 0.3).remove();
+    
+    edge_plot.transition().duration(duration)
+        .attr("x1", function(d,i) {return networks_x(current_nodes[d[0]][node_keys['x']]);})
+        .attr("y1", function(d,i) {return networks_y(current_nodes[d[0]][node_keys['y']]);})
+        .attr("x2", function(d,i) {return networks_x(current_nodes[d[1]][node_keys['x']]);})
+        .attr("y2", function(d,i) {return networks_y(current_nodes[d[1]][node_keys['y']]);})
+        .style("stroke-width", function(d,i) { return edge_width(d[2]);})
+        .attr("class", edge_class);
+        //.style("opacity",0.5);
+    edge_plot.enter().append("line").transition().duration(duration)//.filter(function(d) { return d[2] > edge_threshold;})
+        .attr("x1", function(d,i) {return networks_x(current_nodes[d[0]][node_keys['x']]);})
+        .attr("y1", function(d,i) {return networks_y(current_nodes[d[0]][node_keys['y']]);})
+        .attr("x2", function(d,i) {return networks_x(current_nodes[d[1]][node_keys['x']]);})
+        .attr("y2", function(d,i) {return networks_y(current_nodes[d[1]][node_keys['y']]);})
+        .style("stroke-width", function(d,i) { return edge_width(d[2]);})
+        .attr("class", edge_class);
+        //.style("opacity", 0.0);
+        
+    
 }

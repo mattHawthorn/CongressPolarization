@@ -4,9 +4,11 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
+import sys
 import os
 import re
 import sqlite3
+from helpers import *
 from itertools import combinations, combinations_with_replacement
 
 os.chdir('..')
@@ -14,7 +16,7 @@ os.chdir('..')
 networkdb = sys.argv[2]
 con = sqlite3.connect(os.path.join('data',networkdb))
 
-start = 1959*12+9
+start = 1900*12
 end = 2016*12+4
 time_var = 'month'
 agreement_metric = 'agreement'
@@ -31,7 +33,7 @@ def plot_embed_upload(networks_con,congress_con,time_var,start,end,location,agre
     xy=None
     con = networks_con
     
-    senators = pd.read_sql_query('select * from senators',congresscon)
+    senators = pd.read_sql_query('select * from senators',congress_con)
     senators.set_index('id',inplace=True)
 
     for time in np.arange(start,end+1):
