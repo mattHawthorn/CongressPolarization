@@ -5,7 +5,7 @@ schema:
     - ['party1','TEXT']
     - ['party2','TEXT']
     - ['agreement','REAL']
-    - ['affinity','REAL']
+#    - ['affinity','REAL']
 keys:
     - location
     - time

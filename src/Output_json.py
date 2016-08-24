@@ -2,7 +2,8 @@
 import sys
 import os
 import sqlite3
-from helpers import *
+from helpers import write_json
+
 
 os.chdir('..')
 

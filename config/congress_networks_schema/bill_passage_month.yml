@@ -3,6 +3,7 @@ schema:
     - ['location','TEXT']
     - ['time','INTEGER']
     - ['rate','REAL']
+    - ['number','INTEGER']
 keys:
     - location
     - time

@@ -4,7 +4,6 @@ import os
 import sys
 from helpers import *
 
-# initialize the tables
 os.chdir('..')
 
 # initialize the database
@@ -93,7 +92,8 @@ for time_col in time_cols:
                 r2 = per_year
                 y2 -= 1
             
-            print("{}: {}/{}-{}/{} voters: {} bills: {}".format(time_col,r1,y1,r2,y2,votes.shape[0],votes.shape[1]))
+            print("{}s: {}/{}-{}/{} voters: {}".format(time_col,r1,y1,r2,y2,votes.shape[0]))
+            print("bills: {}".format(votes.shape[1]))
                 
             # build up data for the nodes 1 senator at a time
             node_data = []
@@ -149,29 +149,37 @@ for time_col in time_cols:
                 print("Fewer than {} voters; skipping.".format(min_voters))
                 continue
             
-            affinities = affinity_table(votes,affinity_func=voter_perplexity,transform=np.exp)
-            agreements = affinity_table(votes,affinity_func=voter_agreement_pos)
+            ### **In what follows, everything ivolving 'affinity' is commented out. I opted for the simpler agreement metric instead, for interpretability.**
             
-            party_affinities = interparty_affinity(affinities,summary_func=lambda x: np.exp(np.mean(np.log(x))))
+            #affinities = affinity_table(votes,affinity_func=voter_perplexity,transform=np.exp)
+            agreements = affinity(votes)#affinity_table(votes,affinity_func=voter_agreement_pos)
+            
+            #party_affinities = interparty_affinity(affinities,summary_func=lambda x: np.exp(np.mean(np.log(x))))
             party_agreements = interparty_affinity(agreements,summary_func=np.mean)
             
             command = "select aye,nay from bills where {}<={} and {}>={} and location='{}'".format(time_col,time_val,
                                                                                                  time_col,time_val-lag,location)
             df = pd.read_sql(command,con)
             if df.shape[0] == 0:
-                rate_of_passage = 0
+                rate_of_passage = 0.0
+                num_passed = 0
             else:
-                rate_of_passage = (df['aye'] > df['nay']).sum()/df.shape[0]
-                print(rate_of_passage)
+                passed = df['aye'] > df['nay']
+                num_passed = passed.sum()
+                rate_of_passage = num_passed/df.shape[0]
+                print("Number of bills passed: {}".format(num_passed))
+                print("Rate of bill passage: {}".format(rate_of_passage))
             
-            affinities.columns = affinities.columns.droplevel(1)
-            affinities.index = affinities.index.droplevel(1)
+            #affinities.columns = affinities.columns.droplevel(1)
+            #affinities.index = affinities.index.droplevel(1)
             agreements.columns = agreements.columns.droplevel(1)
             agreements.index = agreements.index.droplevel(1)
             
-            voter_data = unique_comparisons([agreements,affinities],features=[location,time_val])
-            party_data = unique_comparisons([party_agreements,party_affinities],features=[location,time_val],
-                                           self_comparison=True)
+            #voter_data = unique_comparisons([agreements,affinities],features=[location,time_val])
+            #party_data = unique_comparisons([party_agreements,party_affinities],features=[location,time_val],
+            #                               self_comparison=True)
+            voter_data = unique_comparisons([agreements],features=[location,time_val])
+            party_data = unique_comparisons([party_agreements],features=[location,time_val],self_comparison=True)
             
             
             
@@ -179,7 +187,7 @@ for time_col in time_cols:
             insert_rows(out_cur, 'party_affinities_'+time_col, party_data, party_affinity_fields)
             insert_rows(out_cur, 'nodes_'+time_col, node_data, node_fields)
             
-            command = 'insert or replace into bill_passage_{} values {}'.format(time_col,(location,time_val,rate_of_passage))
+            command = 'insert or replace into bill_passage_{} values {}'.format(time_col,(location,time_val,rate_of_passage,num_passed))
             out_cur.execute(command)
             
             out_con.commit()

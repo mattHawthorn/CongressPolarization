@@ -98,7 +98,6 @@ function print_text_lines(elt, x, y, size, sep, lines, cl, anchor='left',clear=t
         .attr("class", cl)
         .style("text-anchor", anchor)
         .text(function(d,i){return d});
-            
 }
 
 
@@ -165,6 +164,30 @@ function edge_class(d,i) {
 }
 
 
+
+function reset_window(x_mi,x_ma,y_mi,y_ma) {
+console.log(x_mi,x_ma);
+    if (x_mi === undefined) {
+        x_min = ref_x_min;
+    } else {x_min = x_mi;};
+    if (x_ma === undefined) {
+        x_max = ref_x_max;
+    } else {x_max = x_ma;};
+    if (y_mi === undefined) {
+        y_min = ref_y_min;
+    } else {y_min = y_mi;};
+    if (y_ma === undefined) {
+        y_max = ref_y_max;
+    } else {y_max = y_ma;};
+    console.log(x_min,x_max,y_min,y_max);
+    networks_x = d3.scale.linear().domain([x_min,x_max])
+            .range([networks_left + 0.5*(c - plot_w) + networks_offset, networks_left + c - 0.5*(c - plot_w) + networks_offset]);
+    networks_y = d3.scale.linear().domain([y_min,y_max])
+                                .range([networks_top + networks_h - pad, networks_top + pad]);
+    plot_network();
+}
+
+
 function init_network() {
     networks.selectAll("line.edge").data(current_edges,
                                         function(d) {return d[0] + ' ' + d[1];})
@@ -196,7 +219,27 @@ function plot_network(duration=500) {
         .attr("cx", function(d,i) {/*console.log(networks_x(d[node_keys['x']]));*/ return networks_x(d[node_keys['x']]);})
         .attr("cy", function(d,i) {/*console.log(networks_y(d[node_keys['y']]));*/ return networks_y(d[node_keys['y']]);})
         .attr("r", 0.0)
-        .attr("class", node_class);
+        .attr("class", node_class)
+        .on("mouseover", function(d){
+          var senator = senators[d[0]];
+          var name = senator["first_name"] + " " + senator["last_name"];
+          var age = d[1];
+          var experience = d[2];
+          var party = senator["party"]
+          var state = senator["state"]
+          var lines = [name, party + ", " + state, "Age: " + age.toString(), "Yrs. exp.: " + Math.round(experience).toString()];
+          var coords = d3.mouse(this);
+          console.log(name);
+          print_text_lines(networks,coords[0],coords[1],20,5,lines,"info_text");
+//          console.log(name);
+//          networks.append("text")
+//              .attr("x",coords[0])
+//              .attr("y",coords[1])
+//              .text(name).attr("class","info_text");
+        })
+        .on("mouseout", function(){
+          networks.selectAll("text.info_text").remove();
+        });
     node_plot.exit().transition().duration(duration * 0.3).remove();
     node_plot.transition().duration(duration * 0.7)
         //.delay(function(d, i) { return 15*d[node_keys['experience']];}) // most experienced move last

@@ -17,6 +17,16 @@
             stroke: #111;
             stroke-width: 4;
         }
+        .zoom_box {
+            stroke: #888;
+            fill: #111;
+            opacity: 0.4;
+            stroke-width: 2;
+        }
+        .zoom_button {
+            stroke: none;
+            fill: #666;
+        }
         .headerBackground {
             fill: #000;
         }
@@ -25,6 +35,9 @@
             font-family: "Default";
         }
         .info_text {
+            fill: #888;
+        }
+        .label_text {
             fill: #888;
         }
         .info_title {
@@ -86,6 +99,8 @@
         }
         .node {
             opacity: 0.6;
+            stroke-opacity: 0.4;
+            stroke-width: 10;
         }
         .edge {
             opacity: 0.3;

@@ -169,6 +169,8 @@ con.commit()
 
 # Tests
 # check that all years are present
+periods = dict(zip(['year','quarter','month'],[1,4,12]))
+
 for time_col in ['year','quarter','month']:
     times = cur.execute("select distinct {} from votes".format(time_col)).fetchall()
     times = np.array(sorted(list(zip(*times))[0]))
@@ -176,8 +178,12 @@ for time_col in ['year','quarter','month']:
     diffs = diffs !=1
     if np.sum(diffs) != 0:
         print("Warning: gaps are present in the {}s imported to the db".format(time_col))
-        print(times[0:-1][diffs])
-        print(times[1:][diffs])
+        start_times = list(times[0:-1][diffs])
+        start_times = [(int(time)//periods[time_col],int(time)%periods[time_col]) for time in start_times]
+        end_times = list(times[1:][diffs])
+        end_times = [(int(time)//periods[time_col],int(time)%periods[time_col]) for time in end_times]
+        for start,end in zip(start_times,end_times):
+            print("{} to {}".format(start,end))
         break
 
 

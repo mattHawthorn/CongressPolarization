@@ -6,6 +6,8 @@ import logging
 import sqlite3
 import pandas as pd
 import numpy as np
+from scipy import spatial
+from scipy import linalg
 from lxml import objectify
 from functools import reduce
 from itertools import product, combinations_with_replacement, combinations
@@ -216,7 +218,7 @@ def vote_table(con,time_col,time,location,lag=0,drop_dups=True):
     command = """
         select session, year, roll, votes.id, party, vote
         from votes join senators on votes.id = senators.id
-        where {} > {} and {} <= {} and location = '{}'""".format(time_col,start,time_col,end,location)
+        where {} >= {} and {} <= {} and location = '{}'""".format(time_col,start,time_col,end,location)
     
     data = pd.read_sql_query(command,con)
     
@@ -275,6 +277,19 @@ def voter_perplexity(voter1,voter2,probs,weights=None):
         return p/count
     else:
         return 0.0
+
+
+def affinity(vote_table,smoothing=2.0):
+    """
+    Very fast vectorized agreement matrix from vote table
+    """
+    v = vote_table.values
+    u = np.abs(v)
+    dif = np.dot(v,v.T) # this gives the difference: num_agreements - num_disagreements
+    tot = np.dot(u,u.T) # this gives the total: num_agreements + num_disagreements
+    # so (tot + dif)/(2.0*tot) gives the rate of agreement
+    return pd.DataFrame(index = vote_table.index,columns = vote_table.index,data = ((tot + dif)/2.0 + smoothing)/(tot + 2.0*smoothing))
+
 
 def affinity_table(vote_table,weight_func=None,affinity_func=voter_agreement_pos,transform=None):
     vote_dist = vote_table.apply(vote_dist_series,axis=0)
@@ -368,7 +383,7 @@ def get_edges(con,time_var,time,location,start=None,end=None,threshold=0.0):
     return edges
 
 
-def get_distances(con,agreement_metric,time_var,location,time=None,transform=None):
+def get_distances(con,agreement_metric,time_var,location,time=None,transform=lambda x: x):
     command = """
     select id1, id2, {} from affinities_{} where location='{}' and time={}""".format(agreement_metric,time_var,location,time)
     edges = pd.read_sql_query(command,con)
@@ -387,25 +402,85 @@ def get_distances(con,agreement_metric,time_var,location,time=None,transform=Non
     sims.sort_index(axis=0,inplace=True)
     sims.sort_index(axis=1,inplace=True)
     
-    # sims become distances with the inverse function for embedding
-    sims = agreement_inverses[agreement_metric](sims)
-    sims.fillna(0,inplace=True)
+    ### **The old way**
     
-    if transform:
-        return transform(sims)
+    # sims become distances with the inverse function for embedding
+    #sims = agreement_inverses[agreement_metric](sims)
+    #sims.fillna(0,inplace=True)
+    
+    ## **The new way**
+    
+    sims.fillna(0,inplace=True)
+    return pd.DataFrame(index=sims.index,columns=sims.columns, data=transform(sims.values))
+    
+
+def D(A):
+    d = np.zeros(A.shape)
+    d[np.diag_indices_from(A)] = A.sum(axis=1)
+    return d
+
+
+def L(A):
+    return D(A) - A
+
+
+def L_rw(A):
+    d = D(A)
+    d[np.diag_indices_from(d)] = 1/d[np.diag_indices_from(d)]
+    return np.eye(d.shape[0]) - np.dot(d,A)
+
+
+def L_sym(A):
+    d = D(A)
+    d[np.diag_indices_from(d)] = 1/np.sqrt(d[np.diag_indices_from(d)])
+    return np.eye(d.shape[0]) - d.dot(A).dot(d)
+
+
+def spectral_embedding(A,k=2,laplacian='sym'):
+    if laplacian=='sym':
+        l = L_sym(A)
+    elif laplacian=='rw':
+        l = L_rw(A)
+    elif laplacian=='standard':
+        l = L(A)
     else:
-        return sims
+        raise ValueError("laplacian must be in {'standard','sym','rw'}")
+        
+    eigvals, eigvecs = np.linalg.eigh(l)
+    return eigvecs[:,1:(k+1)]
+
+
+def commute_time(A):
+    """
+    Commute time distance; expected time for a random walk on a weighted graph to leave node i, hit node j, and return.
+    See Qiu, Huaijun, and Edwin R. Hancock. "Clustering and embedding using commute times." 
+    IEEE Transactions on Pattern Analysis and Machine Intelligence 29.11 (2007): 1873-1890.
+    """
+    l = L(A)
+    vol = A.sum()
+    l_plus = np.linalg.pinv(l)
+    com_time = np.empty(A.shape)
+    for i,j in combinations(range(A.shape[0]),2):
+        ct = l_plus[i,i] + l_plus[j,j] - 2.0*l_plus[i,j]
+        com_time[i,j] = ct
+        com_time[j,i] = ct
+    
+    com_time[np.diag_indices_from(com_time)] = 0.0
+    com_time = vol*com_time
+    com_time[com_time < 0.0] = 0.0
+    com_time = 0.5*(com_time + com_time.T)
+    return com_time
 
 
 def compute_embedding(sims,senators,last_ids=None,last_embedding=None,last_centers=None):
     parties = senators.party[sims.index]
     parties = parties.apply(normalize_party)
     
-    mds = manifold.MDS(n_components=2, max_iter=50000, eps=1e-9,
+    mds = manifold.MDS(n_components=2, max_iter=50000, eps=1e-30,
                        dissimilarity="precomputed", n_jobs=-2,metric=True)
     
     if last_embedding is None:
-        embedding = mds.fit(sims.values).embedding_
+        embedding = mds.fit_transform(sims.values)
     else:
         # the complicated case of initializing with the last time slice's embedding
         init = np.zeros((sims.shape[0],2))
@@ -424,41 +499,27 @@ def compute_embedding(sims,senators,last_ids=None,last_embedding=None,last_cente
         indices = np.logical_and(dem_locs,newlocs)
         init[indices,:] = np.random.randn(indices.sum(),2)*0.2 #+ last_centers[1]
         
-        embedding = mds.fit(sims.values,init = init).embedding_
+        embedding = mds.fit_transform(sims.values,init = init)
             
-    
-    center = embedding.mean(axis=0)
-    embedding = embedding - center
-    #plt.plot(*center,'go')
-    
-    # now everything might be a little off center if we want the party means to line up on a line
-    # through the origin; let's fix that
+    # x should be highest-variance dimension
+    embedding = PCA(n_components=2).fit_transform(embedding)
+    # now we want to make sure the party centroids are strictly left-right oriented
     rep_center = embedding[parties.values=='republican',:].mean(axis=0)
     dem_center = embedding[parties.values=='democrat',:].mean(axis=0)
+    dist = np.linalg.norm(rep_center - dem_center)
+    cos = (rep_center[0] - dem_center[0])/dist
+    sin = (rep_center[1] - dem_center[1])/dist
+    rot = np.array([[cos,-1.0*sin],[sin,cos]])
+    embedding = np.dot(embedding,rot)
+    #plt.plot(*center,'go')    
     #plt.plot(*rep_center,'go')
     #plt.plot(*dem_center,'go')
     
-    # minimize the distance from the origin along a line joining these
-    #norm1 = np.sum(rep_center**2)
-    #norm2 = np.sum(dem_center**2)
-    #dot = np.sum(rep_center*dem_center)
-    #delta = (1-norm2/dot)/(norm2/norm1-1)
-    #delta = (dot + norm2)/(norm1 + norm2 + 2.0*dot)
-    #center = delta*rep_center + (1-delta)*dem_center
-    #print(delta)
-    #print(center)
-    #embedding = embedding - center
-    #rep_center = rep_center - center
-    #dem_center = dem_center - center
-        
-    # now rotate to put parties in thier left-right orientation
-    norm1 = np.sqrt(np.sum(rep_center**2))
-    cos = rep_center[0]/norm1
-    sin = rep_center[1]/norm1
-    rot = np.array([[cos,-1.0*sin],[sin,cos]])
-    embedding = np.apply_along_axis(lambda row: np.dot(row,rot),1,embedding)
     rep_center = np.dot(rep_center,rot)
     dem_center = np.dot(dem_center,rot)
+    
+    if rep_center[0] < dem_center[0]:
+        embedding = np.dot(embedding,np.array([[-1.0,0.0],[0.0,1.0]]))
     
     return embedding, sims.index, (rep_center, dem_center)
 
@@ -469,7 +530,7 @@ def plot_network(sims,embedding,senators,xlim=(-0.6,0.6),ylim=(-0.3,0.3),thresho
     #print(parties[0:10])
     colors = parties.apply(lambda party: party_colors.get(party,'y'))
     
-    edges = [[embedding[i, :], embedding[j, :], sims.iloc[i,j],(sims.index[i],sims.columns[j])] for i,j in combinations(np.arange(sims.shape[0]),2) if sims.iloc[i,j] < threshold]
+    edges = [[embedding[i, :], embedding[j, :], sims.iloc[i,j],(sims.index[i],sims.columns[j])] for i,j in combinations(np.arange(sims.shape[0]),2) if sims.iloc[i,j] > threshold]
     #print("{} edges".format(len(edges)))
     
     sizes = 200*np.square(1-sims).apply(np.mean,axis=1)
@@ -563,9 +624,9 @@ def write_json(networks_con,congress_con,output_dir,time_var,start,end,location,
     party_agreement = get_party_affinities(networks_con=networks_con,
                                             agreement_metric='agreement',time_var=time_var,
                                             start=start,end=end,location=location)
-    party_affinity =  get_party_affinities(networks_con=networks_con,
-                                            agreement_metric='affinity',time_var=time_var,
-                                            start=start,end=end,location=location)
+    #party_affinity =  get_party_affinities(networks_con=networks_con,
+    #                                        agreement_metric='affinity',time_var=time_var,
+    #                                        start=start,end=end,location=location)
     
     command = "select time, rate from bill_passage_{} where location='{}' and time >= {} and time <= {}".format(time_var,location,start,end)
     bill_passage = networks_con.execute(command).fetchall()
