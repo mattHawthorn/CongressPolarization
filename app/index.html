@@ -114,7 +114,7 @@ var timelines_y_axis_space = 0.04*c
 
 var month_names = ['Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var numeric_suffixes = ['th','st','nd','rd','th','th','th','th','th','th','th'];
-var key_time_increments = {"Left":-2,"Right":2};
+var key_time_increments = {"ArrowLeft":-2,"ArrowRight":2};
 
     
 // ALL PLOTTING DEPENDS ON THESE GLOBALS
@@ -253,7 +253,7 @@ var networks_y = d3.scale.linear().domain([y_min,y_max])
 // instructions for viewing
 networks.append("text").attr("x", networks_left + pad).attr("y", networks_y(y_min))
         .style("font-size", font_size(tick_label_size))
-        .text("(Use ← & → keys or drag the selector to navigate in time. Click and drag to zoom, or click once to reset.)")
+        .text("(Use ctrl + ← & → keys or drag the selector to navigate in time. Click and drag to zoom, or click once to reset.)")
 networks.append("text").attr("x", networks_left + pad).attr("y", networks_y(y_min) - 1.5*tick_label_size)
         .style("font-size", font_size(tick_label_size))
         .text("Press F11 to enter full-screen (best viewed at 1920x1080)")
@@ -518,10 +518,13 @@ timelines.on("mousemove", function(){
 
 // key bindings for selecting time slices
 //---------------------------------------------------------------//
-Mousetrap.bind(['left','right'], 
+Mousetrap.bind(['ctrl+left','ctrl+right'], 
                 function(event){
+                    console.log(event);
                     event.preventDefault();
-                    var key = event.keyIdentifier;
+                    var key = event.code;
+                    console.log(key);
+                    console.log("something happened on the keyboard");
                     var increment = key_time_increments[key];
                     increment_time(increment);
                     set_network_vars();

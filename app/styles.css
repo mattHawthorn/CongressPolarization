@@ -31,14 +31,14 @@
             fill: #000;
         }
         text {
-            fill: #666;
+            fill: #888;
             font-family: "Default";
         }
         .info_text {
-            fill: #888;
+            fill: #aaa;
         }
         .label_text {
-            fill: #888;
+            fill: #aaa;
         }
         .info_title {
             text-decoration-line: underline;
@@ -47,10 +47,10 @@
             fill: #0052cc;
         }
         .tick_label {
-            fill: #888;
+            fill: #aaa;
         }
         .y_axis_label {
-            fill: #888;
+            fill: #aaa;
         }
         .time_axis { 
             stroke: #666;
@@ -80,8 +80,8 @@
         .dem {
 /*            fill: #4d0099;*/
 /*            stroke: #4d0099;*/
-            fill: #002db3;
-            stroke: #002db3;
+            fill: #0000b3;
+            stroke: #0000b3;
         }
         .ind {
 /*            fill: #4d0099;*/
@@ -98,9 +98,9 @@
             stroke: #b36b00;
         }
         .node {
-            opacity: 0.6;
-            stroke-opacity: 0.4;
-            stroke-width: 10;
+            opacity: 0.7;
+            stroke-opacity: 1.0;
+            stroke-width: 4;
         }
         .edge {
             opacity: 0.3;
